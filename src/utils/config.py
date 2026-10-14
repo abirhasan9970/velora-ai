@@ -1,8 +1,8 @@
-﻿"""
-config.py
----------
-Loads environment variables from .env and exposes them as a typed Settings object.
-Never hardcode secrets - always read from environment.
+"""Application configuration loader.
+
+Reads from:
+1. Streamlit Secrets (when running on Streamlit Cloud)
+2. Environment variables / .env file (for local development)
 """
 from __future__ import annotations
 
@@ -12,44 +12,62 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv()
+
+# ==== PROJECT ROOT ====
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @dataclass(frozen=True)
 class Settings:
-    """Immutable application settings."""
+    """Application settings."""
     app_env: str
     log_level: str
     max_upload_mb: int
     llm_provider: str
-    gemini_api_key: str | None
+    gemini_api_key: str
     gemini_model: str
 
-    @property
-    def is_production(self) -> bool:
-        return self.app_env.lower() == "production"
+
+def _get_secret(name: str) -> str | None:
+    """Get a value from Streamlit Secrets first, then environment variables."""
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and name in st.secrets:
+            return str(st.secrets[name])
+    except Exception:
+        pass
+
+    value = os.getenv(name)
+    if value is not None and value.strip() != "":
+        return value
+
+    return None
 
 
 def _get_int(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None or raw.strip() == "":
+    raw = _get_secret(name)
+    if raw is None or str(raw).strip() == "":
         return default
     try:
         return int(raw)
     except ValueError:
-        raise ValueError(f"Environment variable {name} must be an integer, got: {raw!r}")
+        raise ValueError(
+            f"Environment variable {name} must be an integer, got: {raw!r}"
+        )
 
 
 def load_settings() -> Settings:
     """Read environment variables into a Settings object."""
+    api_key = _get_secret("GEMINI_API_KEY") or ""
+
     return Settings(
-        app_env=os.getenv("APP_ENV", "development"),
-        log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        app_env=_get_secret("APP_ENV") or "development",
+        log_level=(_get_secret("LOG_LEVEL") or "INFO").upper(),
         max_upload_mb=_get_int("MAX_UPLOAD_MB", 50),
-        llm_provider=os.getenv("LLM_PROVIDER", "gemini").lower(),
-        gemini_api_key=os.getenv("GEMINI_API_KEY"),
-        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+        llm_provider=(_get_secret("LLM_PROVIDER") or "gemini").lower(),
+        gemini_api_key=api_key,
+        gemini_model=_get_secret("GEMINI_MODEL") or "gemini-2.0-flash",
     )
 
 
