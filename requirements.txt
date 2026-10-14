@@ -1,0 +1,13 @@
+﻿# ===== Phase 1: Core =====
+python-dotenv==1.0.1
+
+# ===== Phase 2: Data Analysis =====
+pandas
+numpy
+openpyxl
+matplotlib
+tabulate
+
+# ===== Phase 3: LLM (Google Gemini) =====
+google-generativeai
+tenacity
